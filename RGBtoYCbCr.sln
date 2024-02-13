@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34031.279
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RGBtoYCbCr", "RGBtoYCbCr\RGBtoYCbCr.csproj", "{830ADFB9-C3C2-4D3D-AAF8-F11BD7A78FEB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{830ADFB9-C3C2-4D3D-AAF8-F11BD7A78FEB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{830ADFB9-C3C2-4D3D-AAF8-F11BD7A78FEB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{830ADFB9-C3C2-4D3D-AAF8-F11BD7A78FEB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{830ADFB9-C3C2-4D3D-AAF8-F11BD7A78FEB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1FE16021-CC35-4972-897D-90ACD4E847A8}
+	EndGlobalSection
+EndGlobal
