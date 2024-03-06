@@ -11,34 +11,41 @@ using System.Numerics;
 
 namespace RGBtoYCbCr
 {
-    public class RGBtoYCbCrSubsampling
+    public class H261Compressor
     {
         private const int BLOCK_SIZE = 64;
-        private List<double[,]>? blocks;
-        private const double xIsZero = 1 / 1.41421356237;
+        private List<double[,]> blocks;
+        private const double X_IS_ZERO = 1 / 1.41421356237; // sqrt(2)
+        private const int TYPE_Y = 0;
+        private const int TYPE_CbCr = 1;
+
+        public H261Compressor(List<double[,]>? blocks = null)
+        {
+            this.blocks = blocks ?? new List<double[,]>();
+        }
 
         double C(int x)
         {
             if (x == 0)
-                return xIsZero;
+                return X_IS_ZERO;
             else
                 return 1;
         }
         // RGB to YCbCr conversion matrix constants
-        private static readonly double[,] RGBtoYCrCb = {
+        private readonly double[,] RGBtoYCrCb = {
             { 0.299, 0.587, 0.114 },
             { -0.168736, -0.331264, 0.5 },
             { 0.5, -0.418688, -0.081312 }
         };
 
-        private static readonly double[,] YCrCbtoRGB = {
+        private readonly double[,] YCrCbtoRGB = {
             { 1, 0, 1.4 },
             { 1, -0.343, -0.711 },
             { 1, 1.765, 0 }
         };
 
         // luminance quantization matrix constants
-        private static readonly int[,] Luminance =
+        private readonly int[,] Luminance =
         {
             {16, 11, 10, 16, 24, 40, 51, 61 },
             {12, 12, 14, 19, 26, 58, 60, 55 },
@@ -51,7 +58,7 @@ namespace RGBtoYCbCr
         };
 
         // chrominance quantization matrix constants
-        private static readonly int[,] Chrominance =
+        private readonly int[,] Chrominance =
         {
             {17, 18, 24, 47, 99, 99, 99, 99 },
             {18, 21, 26, 66, 99, 99, 99, 99 },
@@ -61,61 +68,92 @@ namespace RGBtoYCbCr
             {99, 99, 99, 99, 99, 99, 99, 99 },
             {99, 99, 99, 99, 99, 99, 99, 99 },
             {99, 99, 99, 99, 99, 99, 99, 99 }
-        }
+        };
 
-        public List<double[,]> Get8x8Blocks_Y(byte[] ycrcb)
+        private List<double[,]> Quantize(List<double[,]> blocks, int type)
         {
-            blocks = new List<double[,]>();
-            int i = 0;
-            int width = ycrcb[0] << 8 | ycrcb[1];
-            int height = ycrcb[2] << 8 | ycrcb[3];
-            while (i < width * height)
+            foreach (double[,] block in blocks)
             {
-                double[,] yblock = new double[8, 8];
                 for (int r = 0; r < 8; r++)
                 {
                     for (int c = 0; c < 8; c++)
                     {
-                        yblock[r, c] = ycrcb[i++];
+                        if (type == TYPE_Y) block[r, c] /= Luminance[r, c];
+                        else block[r, c] /= Chrominance[r, c];
                     }
                 }
-                blocks.Add(yblock);
-            }
-            List<double[,]> cbcrblock = Get8x8Blocks_CbCr(ycrcb, i);
-            foreach (double[,] block in cbcrblock)
-            {
-                blocks.Add(block);
             }
             return blocks;
         }
-        public List<double[,]> Get8x8Blocks_CbCr(byte[] ycrcb, int i)
+
+        private double[,] GetBlock(byte[] ycrcb, ref int i, int type, int width = 0, int height = 0) // pass by reference
+        {
+            double[,] block = new double[8, 8];
+            for (int r = 0; r < 8; r++)
+            {
+                for (int c = 0; c < 8; c++)
+                {
+                    // if Y, ensure cr's and cb's dont sneak in
+                    // i.e YYYY...YYYYCrCr
+                    if (i >= ycrcb.Length || (i >= width * height && type == TYPE_Y)) 
+                        block[r, c] = 0;
+                    else
+                        block[r, c] = ycrcb[i++];
+                }
+            }
+            return block;
+        }
+
+        public List<double[,]> DCTBlocksAndQuantize(byte[] ycrcb)
+        {
+            int i = 4;
+            int width = ycrcb[0] << 8 | ycrcb[1];
+            int height = ycrcb[2] << 8 | ycrcb[3];
+
+            List<double[,]> yblock;
+            List<double[,]> cbcrblock;
+
+            yblock = Get8x8Blocks(ycrcb, ref i, TYPE_Y, width, height);
+            cbcrblock = Get8x8Blocks(ycrcb, ref i, TYPE_CbCr);
+
+            yblock = DCTBlocks(yblock);
+            cbcrblock = DCTBlocks(cbcrblock);
+
+            yblock = Quantize(yblock, TYPE_Y);
+            cbcrblock = Quantize(cbcrblock, TYPE_CbCr);
+
+            foreach (double[,] block in yblock)
+                blocks.Add(block);
+
+            foreach (double[,] block in cbcrblock)
+                blocks.Add(block);
+
+            return blocks;
+        }
+        private List<double[,]> Get8x8Blocks(byte[] ycrcb, ref int i, int type, int width = 0, int height = 0)
         {
             List<double[,]> blocks = new List<double[,]>();
-            while (i < ycrcb.Length)
+
+            // byte structure is YYYYYYY...CbCbCbCb.....CrCrCrCr
+            // image is 4:2:0 subsampled, therefore there are w * h Y's, and (w * h) / 2 cb's and cr's
+            // if y, go as long as w * h
+            // if cbcr, go as long as the length. 
+            while (type == TYPE_CbCr ? i < ycrcb.Length : i < width * height)
             {
-                double[,] cbcrblock = new double[8, 8];
-                for (int r = 0; r < 8; r++)
-                {
-                    for (int c = 0; c < 8; c++)
-                    {
-                        if (i >= ycrcb.Length)
-                            cbcrblock[r, c] = 0;
-                        else
-                            cbcrblock[r, c] = ycrcb[i++];
-                    }
-                }
+                double[,] cbcrblock = GetBlock(ycrcb, ref i, type, width, height);
                 blocks.Add(cbcrblock);
             }
             return blocks;
         }
 
-        public void DCTBlocks(List<double[,]> blocks)
+        private List<double[,]> DCTBlocks(List<double[,]> blocks)
         {
             List<double[,]> dct_blocks = new List<double[,]>();
             for (int i = 0; i < blocks.Count; i++)
             {
                 dct_blocks.Add(DCT(blocks[i], 8, 8));
             }
+            return dct_blocks;
         }
 
         
@@ -127,7 +165,6 @@ namespace RGBtoYCbCr
             {
                 for (int v = 0; v < m; v++)
                 {
-
                     double sum = 0;
                     for (int x = 0; x < n; x++)
                     {
@@ -164,7 +201,7 @@ namespace RGBtoYCbCr
             return result;
         }
 
-        public static Bitmap ConvertYCbCrtoRGB(byte[] ycrcb)
+        public Bitmap ConvertYCbCrtoRGB(byte[] ycrcb)
         {
             int width = ycrcb[0] << 8 | ycrcb[1];   // Retrieve width from the stored bytes
             int height = ycrcb[2] << 8 | ycrcb[3];  // Retrieve height from the stored bytes
@@ -251,7 +288,7 @@ namespace RGBtoYCbCr
             return rgbImage;
         }
 
-        private static double[,] Upsample(double[,] channel)
+        private double[,] Upsample(double[,] channel)
         {
             int width = channel.GetLength(0) * 2;
             int height = channel.GetLength(1) * 2;
@@ -277,8 +314,7 @@ namespace RGBtoYCbCr
         }
 
 
-
-        public static byte[] ConvertRGBtoYCbCr(Bitmap rgbImage)
+        public byte[] ConvertRGBtoYCbCr(Bitmap rgbImage)
         {
             int width = rgbImage.Width;
             int height = rgbImage.Height;
@@ -307,7 +343,6 @@ namespace RGBtoYCbCr
                                 RGBtoYCrCb[2, 2] * pixelColor.B + 128;
                 }
             }
-            Debug.WriteLine(Y[0, 255]);
 
             Cb = Subsample(Cb);
             Cr = Subsample(Cr);
@@ -342,7 +377,7 @@ namespace RGBtoYCbCr
             return ycrcb;
         }
 
-        public static double[,] Subsample(double[,] channel)
+        public double[,] Subsample(double[,] channel)
         {
             int height = channel.GetLength(1) / 2;
             int width = channel.GetLength(0) / 2;
