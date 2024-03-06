@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Diagnostics;
 using System.Numerics;
+using System.Windows.Forms.Design;
 
 namespace RGBtoYCbCr
 {
@@ -78,8 +79,8 @@ namespace RGBtoYCbCr
                 {
                     for (int c = 0; c < 8; c++)
                     {
-                        if (type == TYPE_Y) block[r, c] /= Luminance[r, c];
-                        else block[r, c] /= Chrominance[r, c];
+                        if (type == TYPE_Y) Math.Round(block[r, c] /= Luminance[r, c]);
+                        else Math.Round(block[r, c] /= Chrominance[r, c]);
                     }
                 }
             }
@@ -104,29 +105,106 @@ namespace RGBtoYCbCr
             return block;
         }
 
+
+        public List<int> RLE(double[,] block)
+        {
+            List<int> encodedSymbols = new List<int>();
+
+            block = ZigzagOrder(block);
+            int runLength = 0;
+            int zeroCount = 0;
+
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    double coefficient = block[i, j];
+
+                    if (coefficient == 0)
+                    {
+                        runLength++;
+                        zeroCount++;
+                    }
+                    else
+                    {
+                        encodedSymbols.Add(runLength);
+                        encodedSymbols.Add((int)coefficient);
+                        runLength = 0;
+                    }
+                }
+            }
+            return encodedSymbols;
+        }
+
+        private double[,] ZigzagOrder(double[,] quantizedBlock)
+        {
+            int numRows = quantizedBlock.GetLength(0);
+            int numCols = quantizedBlock.GetLength(1);
+            double[,] zigzagOrder = new double[numRows, numCols];
+
+            int[] zigzagIndices = new int[]
+            {
+                0, 1, 8, 16, 9, 2, 3, 10,
+                17, 24, 32, 25, 18, 11, 4, 5,
+                12, 19, 26, 33, 40, 48, 41, 34,
+                27, 20, 13, 6, 7, 14, 21, 28,
+                35, 42, 49, 56, 57, 50, 43, 36,
+                29, 22, 15, 23, 30, 37, 44, 51,
+                58, 59, 52, 45, 38, 31, 39, 46,
+                53, 60, 61, 54, 47, 55, 62, 63
+            };
+
+            int index = 0;
+            for (int i = 0; i < numRows; i++)
+            {
+                for (int j = 0; j < numCols; j++)
+                {
+                    zigzagOrder[i, j] = quantizedBlock[zigzagIndices[index] / numRows, zigzagIndices[index] % numCols];
+                    index++;
+                }
+            }
+
+            return zigzagOrder;
+        }
+
+        private static int BitSize(double number)
+        {
+            // Get the absolute value of the number
+            double absoluteValue = Math.Abs(number);
+
+            // Get the maximum integer that fits the number
+            long integerValue = Convert.ToInt64(absoluteValue);
+
+            // Get the number of bits needed to represent the integer part
+            int bitCount = integerValue == 0 ? 1 : (int)Math.Floor(Math.Log(integerValue, 2)) + 1;
+
+            return bitCount;
+        }
+
         public List<double[,]> DCTBlocksAndQuantize(byte[] ycrcb)
         {
             int i = 4;
             int width = ycrcb[0] << 8 | ycrcb[1];
             int height = ycrcb[2] << 8 | ycrcb[3];
 
-            List<double[,]> yblock;
-            List<double[,]> cbcrblock;
+            List<double[,]> yblocks;
+            List<double[,]> cbcrblocks;
 
-            yblock = Get8x8Blocks(ycrcb, ref i, TYPE_Y, width, height);
-            cbcrblock = Get8x8Blocks(ycrcb, ref i, TYPE_CbCr);
+            yblocks = Get8x8Blocks(ycrcb, ref i, TYPE_Y, width, height);
+            cbcrblocks = Get8x8Blocks(ycrcb, ref i, TYPE_CbCr);
 
-            yblock = DCTBlocks(yblock);
-            cbcrblock = DCTBlocks(cbcrblock);
+            yblocks = DCTBlocks(yblocks);
+            cbcrblocks = DCTBlocks(cbcrblocks);
 
-            yblock = Quantize(yblock, TYPE_Y);
-            cbcrblock = Quantize(cbcrblock, TYPE_CbCr);
+            yblocks = Quantize(yblocks, TYPE_Y);
+            cbcrblocks = Quantize(cbcrblocks, TYPE_CbCr);
 
-            foreach (double[,] block in yblock)
+            foreach (double[,] block in yblocks)
                 blocks.Add(block);
 
-            foreach (double[,] block in cbcrblock)
+            foreach (double[,] block in cbcrblocks)
                 blocks.Add(block);
+
 
             return blocks;
         }

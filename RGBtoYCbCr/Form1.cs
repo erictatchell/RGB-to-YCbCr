@@ -11,6 +11,7 @@ namespace RGBtoYCbCr
     public partial class Form1 : Form
     {
         byte[] file;
+        List<List<int>> encoded;
         H261Compressor cmp;
         Bitmap originalImage;
         Bitmap convertedImage;
@@ -86,7 +87,13 @@ namespace RGBtoYCbCr
             byte[] ycrcb = cmp.ConvertRGBtoYCbCr(originalImage);
             System.IO.File.WriteAllBytes(filePath, ycrcb);
 
+            encoded = new List<List<int>>();
+
             List<double[,]> blocks = cmp.DCTBlocksAndQuantize(ycrcb);
+            foreach (double[,] block in blocks)
+            {
+                encoded.Add(cmp.RLE(block));
+            }
             //convertedImage = RGBtoYCbCrSubsampling.ConvertYCbCrtoRGB(ycrcb);
             Invalidate();
 
