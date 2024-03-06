@@ -74,7 +74,6 @@ namespace RGBtoYCbCr
             base.OnPaint(e);
             if (originalImage != null)
             {
-                // Draw the image onto the form
                 e.Graphics.DrawImage(originalImage, Point.Empty);
                 e.Graphics.DrawImage(convertedImage, new Point(originalImage.Width + 5));
             }
