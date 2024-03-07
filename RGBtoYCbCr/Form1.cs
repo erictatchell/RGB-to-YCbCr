@@ -5,13 +5,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Diagnostics;
 
 namespace RGBtoYCbCr
 {
     public partial class Form1 : Form
     {
         byte[] file;
-        List<List<int>> encoded;
+        List<List<Tuple<int, int>>> encoded;
+        List<byte> compressed;
         H261Compressor cmp;
         Bitmap originalImage;
         Bitmap convertedImage;
@@ -84,16 +86,29 @@ namespace RGBtoYCbCr
         private void toolStripButton2_Click(object sender, EventArgs e)
         {
             filePath = "C:\\Users\\Eric\\source\\repos\\RGB-to-YCbCr\\RGBtoYCbCr\\face1.eric";
+            List<byte> compressed = new List<byte>();
+
             byte[] ycrcb = cmp.ConvertRGBtoYCbCr(originalImage);
+
+            cmp.AddWidthHeightData(compressed, ycrcb);
+
             System.IO.File.WriteAllBytes(filePath, ycrcb);
 
-            encoded = new List<List<int>>();
+            encoded = new List<List<Tuple<int, int>>>();
 
             List<double[,]> blocks = cmp.DCTBlocksAndQuantize(ycrcb);
             foreach (double[,] block in blocks)
             {
                 encoded.Add(cmp.RLE(block));
             }
+
+            foreach (List<Tuple<int, int>> block in encoded)
+            {
+                compressed.AddRange(cmp.ConvertToBytes(block));
+            }
+            byte[] compressedArr = compressed.ToArray();
+            this.compressed = compressed;
+            System.IO.File.WriteAllBytes(filePath, compressedArr);
             //convertedImage = RGBtoYCbCrSubsampling.ConvertYCbCrtoRGB(ycrcb);
             Invalidate();
 
@@ -103,5 +118,78 @@ namespace RGBtoYCbCr
         {
 
         }
+
+        private void toolStripButton3_Click(object sender, EventArgs e)
+        {
+            List<byte> compressed = this.compressed;
+
+            // Extract width and height
+            int width = (compressed[0] << 8) | compressed[1];
+            int height = (compressed[2] << 8) | compressed[3];
+            compressed.RemoveRange(0, 4);
+
+            // get encoded
+            List<List<Tuple<int, int>>> encodedblocks = cmp.ConvertBackToListOfTuples(compressed);
+
+            // decode
+            List<double[,]> blocks = new List<double[,]>();
+            foreach (List<Tuple<int, int>> encodedblock in encodedblocks)
+            {
+                blocks.Add(cmp.InverseRLE(encodedblock));
+            }
+
+            // dequantize
+            List<double[,]> yblocks = new List<double[,]>();
+            List<double[,]> cbcrblocks = new List<double[,]>();
+            int i = 0, k = 0;
+            while (k < width * height / 64)
+            {
+                yblocks.Add(blocks[i++]);
+                k++;
+            }
+            k = 0;
+            while (k < (width * height / 64) / 2 + 1)
+            {
+                cbcrblocks.Add(blocks[i++]);
+                k++;
+            }
+            yblocks = cmp.Dequantize(yblocks, H261Compressor.TYPE_Y);
+
+            // yblock before IDCT, after dequantize
+            foreach (var block in yblocks)
+            {
+
+            }
+
+            cbcrblocks = cmp.Dequantize(cbcrblocks, H261Compressor.TYPE_Y);
+
+            // inverse DCT
+            yblocks = cmp.IDCTBlocks(yblocks);
+            cbcrblocks = cmp.IDCTBlocks(cbcrblocks);
+
+            List<byte> bytes = new List<byte>();
+            foreach (var block in yblocks)
+            {
+                List<byte> data = cmp.GetBytesFromBlock(block);
+                foreach (byte b in data)
+                {
+                    bytes.Add(b);
+                }
+            }
+            foreach (var block in cbcrblocks)
+            {
+                List<byte> data = cmp.GetBytesFromBlock(block);
+                foreach (byte b in data)
+                {
+                    bytes.Add(b);
+                }
+            }
+            Bitmap jpeg = cmp.ConvertYCbCrtoRGB(bytes.ToArray(), width, height);
+
+            // Save the bitmap to the specified file path
+            filePath = "C:\\Users\\Eric\\source\\repos\\RGB-to-YCbCr\\RGBtoYCbCr\\face1_newnew.jpeg";
+            jpeg.Save(filePath);
+        }
+
     }
 }
