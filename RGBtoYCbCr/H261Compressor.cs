@@ -83,9 +83,9 @@ namespace RGBtoYCbCr
                     for (int c = 0; c < 8; c++)
                     {
                         if (type == TYPE_Y)
-                            Math.Round(block[r, c] /= Luminance[r, c]);
+                            block[r, c] = Math.Round(block[r, c] /= Luminance[r, c]);
                         else
-                            Math.Round(block[r, c] /= Chrominance[r, c]);
+                            block[r, c] = Math.Round(block[r, c] /= Chrominance[r, c]);
                     }
                 }
             }
@@ -101,9 +101,9 @@ namespace RGBtoYCbCr
                     for (int c = 0; c < 8; c++)
                     {
                         if (type == TYPE_Y)
-                            Math.Round(block[r, c] *= Luminance[r, c]);
+                            block[r, c] = Math.Round(block[r, c] *= Luminance[r, c]);
                         else
-                            Math.Round(block[r, c] *= Chrominance[r, c]);
+                            block[r, c] = Math.Round(block[r, c] *= Chrominance[r, c]);
                     }
                 }
             }
@@ -173,8 +173,8 @@ namespace RGBtoYCbCr
             }
 
             // Add a delimiter to indicate the end of a block
-            byteList.Add(byte.MaxValue);
-            byteList.Add(byte.MaxValue);
+            byteList.Add(byte.MinValue);
+            byteList.Add(byte.MinValue);
 
             return byteList;
         }
@@ -188,7 +188,7 @@ namespace RGBtoYCbCr
             for (int i = 0; i < byteList.Count; i++)
             {
                 // Check if the current byte represents the block delimiter
-                if (byteList[i] == byte.MaxValue && byteList[i + 1] == byte.MaxValue)
+                if (byteList[i] == byte.MinValue && byteList[i + 1] == byte.MinValue)
                 {
                     // Add the current block to the list of blocks
                     listOfBlocks.Add(currentBlock);
@@ -350,20 +350,6 @@ namespace RGBtoYCbCr
         }
 
 
-        private static int BitSize(double number)
-        {
-            // Get the absolute value of the number
-            double absoluteValue = Math.Abs(number);
-
-            // Get the maximum integer that fits the number
-            long integerValue = Convert.ToInt64(absoluteValue);
-
-            // Get the number of bits needed to represent the integer part
-            int bitCount = integerValue == 0 ? 1 : (int)Math.Floor(Math.Log(integerValue, 2)) + 1;
-
-            return bitCount;
-        }
-
         public List<double[,]> DCTBlocksAndQuantize(byte[] ycrcb)
         {
             int i = 4;
@@ -382,7 +368,7 @@ namespace RGBtoYCbCr
             // yblock after dct, before quantize
             foreach (var block in yblocks)
             {
-
+                Debug.WriteLine(block);
             }
 
             yblocks = Quantize(yblocks, TYPE_Y);
@@ -413,6 +399,22 @@ namespace RGBtoYCbCr
             return blocks;
         }
 
+        public double satuaration(double value)
+        {
+            if (value > 255)
+            {
+                return 255;
+            }
+            else if (value < 0)
+            {
+                return 0;
+            }
+            else
+            {
+                return value;
+            }
+        }
+
         private List<double[,]> DCTBlocks(List<double[,]> blocks)
         {
             List<double[,]> dct_blocks = new List<double[,]>();
@@ -440,6 +442,7 @@ namespace RGBtoYCbCr
             {
                 for (int v = 0; v < m; v++)
                 {
+
                     double sum = 0;
                     for (int x = 0; x < n; x++)
                     {
@@ -453,6 +456,7 @@ namespace RGBtoYCbCr
                 }
             }
             return result;
+
         }
 
         public double[,] IDCT(double[,] H, int n, int m)
@@ -475,7 +479,6 @@ namespace RGBtoYCbCr
             }
             return result;
         }
-
         public Bitmap ConvertYCbCrtoRGB(byte[] ycrcb, int width, int height)
         {
             double[,] Y = new double[width, height];
